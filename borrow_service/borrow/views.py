@@ -49,9 +49,16 @@ class BorrowRecordViewSet(viewsets.ModelViewSet):
 
         # Lưu bản ghi mượn
         book_title = book_data.get("title", "Unknown")
+        book_price = book_data.get("price", 0.0)
+        img_url = book_data.get("image", "")  # ✅ thêm dòng này
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(username=username, book_title=book_title)
+        serializer.save(
+            username=username,
+            book_title=book_title,
+            price=book_price,  # ✅ thêm đơn giá
+            img_url=img_url,
+        )
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -93,7 +100,7 @@ class BorrowRecordViewSet(viewsets.ModelViewSet):
 
         delta = new_quantity - original_quantity
 
-        # Nếu số lượng thay đổi → trừ/cộng kho
+        # Gọi book_service để cập nhật tồn kho
         book_url = f"{BOOK_SERVICE_URL}{new_book_id}/"
         book_res = requests.get(book_url)
         if book_res.status_code != 200:
@@ -108,11 +115,13 @@ class BorrowRecordViewSet(viewsets.ModelViewSet):
         if update_res.status_code not in (200, 202):
             return Response({"error": "Không thể cập nhật kho"}, status=500)
 
-        # Nếu book_id thay đổi thì lấy lại book_title
+        # Lấy lại title & price nếu book_id thay đổi
         book_title = book_data.get("title", instance.book_title)
+        book_price = book_data.get("price", instance.price)
+        img_url = book_data.get("image", instance.img_url)
 
         # Cập nhật bản ghi
-        serializer.save(book_title=book_title)
+        serializer.save(book_title=book_title, price=book_price, img_url=img_url)
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
@@ -156,7 +165,9 @@ class BorrowRecordViewSet(viewsets.ModelViewSet):
                     "username": record.username,
                     "book_id": record.book_id,
                     "book_title": record.book_title,
+                    "img_url": record.img_url,
                     "quantity": record.quantity,
+                    "price": record.price,
                     "borrowed_date": record.borrowed_date,
                     "return_date": record.return_date,
                     "returned": record.returned,

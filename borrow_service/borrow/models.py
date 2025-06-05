@@ -8,7 +8,9 @@ class BorrowRecord(models.Model):
     username = models.CharField(max_length=150, blank=True)  # ✅ thêm
     book_id = models.IntegerField()
     book_title = models.CharField(max_length=255, blank=True)  # ✅ thêm
+    img_url = models.URLField(blank=True)
     quantity = models.PositiveIntegerField(default=1)
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     borrowed_date = models.DateField(auto_now_add=True)
     return_date = models.DateField(null=True, blank=True)
     returned = models.BooleanField(default=False)

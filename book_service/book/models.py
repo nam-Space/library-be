@@ -11,5 +11,7 @@ class Book(models.Model):
     quantity = models.IntegerField(default=0)
     image = models.URLField(blank=True)
 
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+
     def __str__(self):
         return self.title
