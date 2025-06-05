@@ -1,0 +1,8 @@
+cd auth_service
+python manage.py runserver 8001
+
+cd book_service
+python manage.py runserver 8002
+
+cd borrow_service
+python manage.py runserver 8003
