@@ -62,11 +62,21 @@ class BorrowRecordViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    # Đây là hàm cập nhật cho LIBRARIAN, ADMIN để trả lại sách về giá trị ban đầu nếu người dùng trả sách thành công hoặc trả muộn
     @action(detail=True, methods=["post"])
     def return_book(self, request, pk=None):
         record = self.get_object()
-        if record.returned:
+
+        # Nếu sách đã được trả
+        if record.status == "returned":
             return Response({"message": "Sách đã trả trước đó."})
+
+        # Lấy thông tin từ request để cập nhật status, punish và note
+        new_status = request.data.get(
+            "status", "returned"
+        )  # Nếu không có status, mặc định là "returned"
+        new_punish = request.data.get("punish", 0.0)  # Tiền phạt
+        new_note = request.data.get("note", "")  # Ghi chú
 
         # Gọi book_service để cộng lại tồn kho
         book_url = f"{BOOK_SERVICE_URL}{record.book_id}/"
@@ -75,13 +85,19 @@ class BorrowRecordViewSet(viewsets.ModelViewSet):
             return Response({"error": "Không lấy được sách"}, status=500)
 
         book_data = book_res.json()
-        book_data["quantity"] += record.quantity
+        book_data["quantity"] += record.quantity  # Cộng lại số sách vào kho
         update_res = requests.put(book_url, json=book_data)
         if update_res.status_code not in (200, 202):
             return Response({"error": "Không thể cập nhật tồn kho"}, status=500)
 
+        # Cập nhật các thông tin khác vào BorrowRecord
         record.returned = True
-        record.return_date = date.today()
+        record.return_date = date.today()  # Cập nhật ngày trả sách
+        record.status = new_status  # Cập nhật status
+        record.punish = new_punish  # Cập nhật tiền phạt
+        record.note = new_note  # Cập nhật ghi chú
+
+        # Lưu bản ghi
         record.save()
 
         return Response({"message": "✅ Trả sách thành công!"})
@@ -89,16 +105,28 @@ class BorrowRecordViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
+
+        # Lấy các giá trị cũ của các trường (số lượng sách, book_id)
         original_quantity = instance.quantity
         original_book_id = instance.book_id
 
+        # Lấy serializer và kiểm tra tính hợp lệ của dữ liệu request
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
 
+        # Lấy giá trị mới từ dữ liệu request
         new_quantity = serializer.validated_data.get("quantity", original_quantity)
         new_book_id = serializer.validated_data.get("book_id", original_book_id)
+        new_status = serializer.validated_data.get("status", instance.status)
+        new_punish = serializer.validated_data.get("punish", instance.punish)
+        new_due_date = serializer.validated_data.get("due_date", instance.due_date)
+        new_note = serializer.validated_data.get("note", instance.note)
+        new_returned = serializer.validated_data.get("returned", instance.returned)
+        new_return_date = serializer.validated_data.get(
+            "return_date", instance.return_date
+        )
 
-        delta = new_quantity - original_quantity
+        delta = new_quantity - original_quantity  # Tính thay đổi số lượng sách
 
         # Gọi book_service để cập nhật tồn kho
         book_url = f"{BOOK_SERVICE_URL}{new_book_id}/"
@@ -107,7 +135,7 @@ class BorrowRecordViewSet(viewsets.ModelViewSet):
             return Response({"error": "Không lấy được sách"}, status=500)
 
         book_data = book_res.json()
-        book_data["quantity"] -= delta
+        book_data["quantity"] -= delta  # Cập nhật tồn kho
         if book_data["quantity"] < 0:
             return Response({"error": "Không đủ sách tồn"}, status=400)
 
@@ -115,13 +143,24 @@ class BorrowRecordViewSet(viewsets.ModelViewSet):
         if update_res.status_code not in (200, 202):
             return Response({"error": "Không thể cập nhật kho"}, status=500)
 
-        # Lấy lại title & price nếu book_id thay đổi
+        # Lấy lại title, price, và img_url nếu book_id thay đổi
         book_title = book_data.get("title", instance.book_title)
         book_price = book_data.get("price", instance.price)
         img_url = book_data.get("image", instance.img_url)
 
-        # Cập nhật bản ghi
-        serializer.save(book_title=book_title, price=book_price, img_url=img_url)
+        # Cập nhật các trường mới trong bản ghi
+        serializer.save(
+            book_title=book_title,
+            price=book_price,
+            img_url=img_url,
+            status=new_status,
+            punish=new_punish,
+            due_date=new_due_date,
+            note=new_note,
+            returned=new_returned,
+            return_date=new_return_date,
+        )
+
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
@@ -154,27 +193,13 @@ class BorrowRecordViewSet(viewsets.ModelViewSet):
         records = BorrowRecord.objects.all()
         if returned in ["true", "false"]:
             records = records.filter(returned=(returned.lower() == "true"))
-        result = []
+            serializer = self.get_serializer(records, many=True)
 
-        for record in records:
+            return Response(serializer.data)
 
-            result.append(
-                {
-                    "id": record.id,
-                    "user_id": record.user_id,
-                    "username": record.username,
-                    "book_id": record.book_id,
-                    "book_title": record.book_title,
-                    "img_url": record.img_url,
-                    "quantity": record.quantity,
-                    "price": record.price,
-                    "borrowed_date": record.borrowed_date,
-                    "return_date": record.return_date,
-                    "returned": record.returned,
-                }
-            )
+        serializer = self.get_serializer(records, many=True)
 
-        return Response(result)
+        return Response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="history")
     def history_by_user(self, request):

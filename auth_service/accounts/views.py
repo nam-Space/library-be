@@ -6,6 +6,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
+from rest_framework import viewsets
+from rest_framework.decorators import action
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -41,4 +43,22 @@ class UserProfileView(generics.RetrieveAPIView):
     def get(self, request):
         user = request.user  # Được gán từ JWT token
         serializer = UserSerializer(user)
+        return Response(serializer.data)
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()  # Lấy toàn bộ người dùng
+    serializer_class = UserSerializer  # Serializer cho User
+
+    @action(detail=False, methods=["get"])
+    def get_users_by_role(self, request):
+        role = request.query_params.get("role", None)
+        if role:
+            if role not in ["CUSTOMER", "LIBRARIAN", "ADMIN"]:
+                return Response({"error": "Role không hợp lệ"}, status=400)
+            users = User.objects.filter(role=role)
+        else:
+            users = User.objects.all()
+
+        serializer = self.get_serializer(users, many=True)
         return Response(serializer.data)

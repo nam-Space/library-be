@@ -10,7 +10,7 @@ class Book(models.Model):
     published_date = models.DateField()
     quantity = models.IntegerField(default=0)
     image = models.URLField(blank=True)
-
+    score = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
 
     def __str__(self):

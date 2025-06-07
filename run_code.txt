@@ -9,3 +9,6 @@ python manage.py runserver 8003
 
 cd sentiment_service
 python manage.py runserver 8004
+
+cd comment_service
+python manage.py runserver 8005
